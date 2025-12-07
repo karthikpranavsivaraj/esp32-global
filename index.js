@@ -1,6 +1,7 @@
 /**
  * @file index.js
  * @brief Main backend server for hotel access control and monitoring.
+ * @version 1.0.1
  */
 
 const express = require('express');
@@ -23,7 +24,11 @@ const mqttPort = process.env.MQTT_PORT || 1883;
 // CORS: allowed origins for browser and SSE clients
 const corsOrigins = [
   'https://hotel-frontend-two-puce.vercel.app',
-  'https://hotel-backend-5kcn.onrender.com'
+  'https://hotel-backend-5kcn.onrender.com',
+  'http://localhost:3001',
+  'http://localhost:3000',
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1:3000'
 ];
 if (process.env.FRONTEND_URL) corsOrigins.push(process.env.FRONTEND_URL);
 
@@ -54,9 +59,7 @@ app.use(helmet({
 
 // Request logging middleware
 app.use((req, res, next) => {
-  
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-
   next();
 });
 
@@ -115,10 +118,10 @@ app.get('/api/events/:hotelId', (req, res) => {
     })}\n\n`;
     
     res.write(initialMessage);
-    console.log(📡 SSE client connected for hotel ${hotelId});
+    console.log(`📡 SSE client connected for hotel ${hotelId}`);
 
     // Store client for broadcasting
-    const clientId = ${Date.now()}-${Math.random().toString(36).substr(2, 9)};
+    const clientId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     if (!global.sseClients) {
       global.sseClients = new Map();
     }
@@ -128,7 +131,7 @@ app.get('/api/events/:hotelId', (req, res) => {
     const heartbeat = setInterval(() => {
       try {
         if (res.writable && global.sseClients && global.sseClients.has(clientId)) {
-          res.write(: heartbeat\n\n);
+          res.write(`: heartbeat\n\n`);
         } else {
           clearInterval(heartbeat);
         }
@@ -143,7 +146,7 @@ app.get('/api/events/:hotelId', (req, res) => {
 
     // Handle client disconnect
     req.on('close', () => {
-      console.log(📡 SSE client disconnected for hotel ${hotelId});
+      console.log(`📡 SSE client disconnected for hotel ${hotelId}`);
       clearInterval(heartbeat);
       if (global.sseClients) {
         global.sseClients.delete(clientId);
@@ -584,7 +587,7 @@ const frontendClients = new Set();
 frontendWsServer.on('connection', function(ws, req) {
   const clientIP = req.socket.remoteAddress;
   const origin = req.headers.origin;
-  console.log(🔗 Frontend client connected via WebSocket from ${clientIP}, origin: ${origin});
+  console.log(`🔗 Frontend client connected via WebSocket from ${clientIP}, origin: ${origin}`);
   
   // Set connection timeout
   const connectionTimeout = setTimeout(() => {
@@ -630,7 +633,7 @@ frontendWsServer.on('connection', function(ws, req) {
   });
   
   ws.on('close', (code, reason) => {
-    console.log(📡 Frontend WebSocket client disconnected: ${code} ${reason?.toString() || 'No reason'});
+    console.log(`📡 Frontend WebSocket client disconnected: ${code} ${reason?.toString() || 'No reason'}`);
     clearInterval(pingInterval);
     clearTimeout(connectionTimeout);
     frontendClients.delete(ws);
@@ -660,7 +663,7 @@ console.log('Frontend WebSocket server initialized on /ws endpoint');
  */
 function broadcastToClients(event, data) {
   const message = JSON.stringify({ event, data });
-  console.log(Broadcasting to ${frontendClients.size} WebSocket clients and ${global.sseClients ? global.sseClients.size : 0} SSE clients:, { event, data });
+  console.log(`Broadcasting to ${frontendClients.size} WebSocket clients and ${global.sseClients ? global.sseClients.size : 0} SSE clients:`, { event, data });
   
   // Broadcast to WebSocket clients with improved error handling
   const disconnectedWsClients = [];
@@ -685,7 +688,7 @@ function broadcastToClients(event, data) {
 
   // Broadcast to SSE clients with improved error handling
   if (global.sseClients && global.sseClients.size > 0) {
-    const sseMessage = data: ${message}\n\n;
+    const sseMessage = `data: ${message}\n\n`;
     const disconnectedSseClients = [];
     
     global.sseClients.forEach((client, clientId) => {
@@ -722,7 +725,7 @@ mqttWsServer.on('connection', function(ws, req) {
       const msg = JSON.parse(message.toString());
       
       if (msg.cmd === 'publish' && msg.topic && msg.payload) {
-        console.log(📨 JSON-MQTT publish: ${msg.topic});
+        console.log(`📨 JSON-MQTT publish: ${msg.topic}`);
         
         // Parse payload
         let payloadData;
@@ -776,7 +779,7 @@ async function processMqttMessage(topic, data) {
       const accessType = getAccessType(data.role);
       data.accessType = accessType;
       await new Attendance(data).save();
-      console.log(Saved attendance for room ${roomNum});
+      console.log(`Saved attendance for room ${roomNum}`);
       
       // Update room status
       const { minCleaningDurationSeconds } = await getSettingsForHotel(data.hotelId);
@@ -802,19 +805,19 @@ async function processMqttMessage(topic, data) {
       
       update.lastSeenAt = new Date().toISOString();
       await Room.findOneAndUpdate({ hotelId: data.hotelId, number: roomNum }, update, { upsert: true });
-      broadcastToClients(roomUpdate:${data.hotelId}, { roomNum, ...update });
+      broadcastToClients(`roomUpdate:${data.hotelId}`, { roomNum, ...update });
       
       // Create activity
       const activity = {
         hotelId: data.hotelId,
         id: Date.now().toString(),
         type: data.check_in ? 'checkin' : 'checkout',
-        action: ${data.role} checked ${data.check_in ? 'in' : 'out'} to Room ${data.room},
+        action: `${data.role} checked ${data.check_in ? 'in' : 'out'} to Room ${data.room}`,
         user: data.role,
         time: data.check_in || data.check_out
       };
       await new Activity(activity).save();
-      broadcastToClients(activityUpdate:${data.hotelId}, activity);
+      broadcastToClients(`activityUpdate:${data.hotelId}`, activity);
     } else if (type === 'power') {
       const current = Number(data.current || 0);
       await new PowerLog({ hotelId: data.hotelId, room: roomNum, current, timestamp: data.timestamp || new Date().toISOString() }).save();
@@ -822,31 +825,31 @@ async function processMqttMessage(topic, data) {
       const { lowPowerCurrentThreshold } = await getSettingsForHotel(data.hotelId);
       const update = { hasLowPower: current > 0 && current <= lowPowerCurrentThreshold, lastSeenAt: new Date().toISOString() };
       await Room.findOneAndUpdate({ hotelId: data.hotelId, number: roomNum }, update, { upsert: true });
-      broadcastToClients(roomUpdate:${data.hotelId}, { roomNum, ...update });
+      broadcastToClients(`roomUpdate:${data.hotelId}`, { roomNum, ...update });
     } else if (type === 'alerts') {
       await new Alert(data).save();
       const activity = {
         hotelId: data.hotelId,
         id: Date.now().toString(),
         type: 'security',
-        action: Alert: ${data.alert_message} for ${data.role} in Room ${data.room},
+        action: `Alert: ${data.alert_message} for ${data.role} in Room ${data.room}`,
         user: 'System',
         time: data.triggered_at
       };
       await new Activity(activity).save();
-      broadcastToClients(activityUpdate:${data.hotelId}, activity);
+      broadcastToClients(`activityUpdate:${data.hotelId}`, activity);
     } else if (type === 'denied_access') {
       await new Denied(data).save();
       const activity = {
         hotelId: data.hotelId,
         id: Date.now().toString(),
         type: 'security',
-        action: Denied access to ${data.role}: ${data.denial_reason} for Room ${data.room},
+        action: `Denied access to ${data.role}: ${data.denial_reason} for Room ${data.room}`,
         user: data.role,
         time: data.attempted_at
       };
       await new Activity(activity).save();
-      broadcastToClients(activityUpdate:${data.hotelId}, activity);
+      broadcastToClients(`activityUpdate:${data.hotelId}`, activity);
     }
   } catch (err) {
     console.error('Error processing MQTT message:', err.message);
@@ -858,7 +861,7 @@ console.log('🚫 Aedes TCP MQTT broker disabled (using WebSocket only)');
 
 // Disable Aedes publish handler to prevent conflicts
 aedes.on('client', (client) => {
-  console.log('⚠ Aedes client connected (should not happen)');
+  console.log('⚠️ Aedes client connected (should not happen)');
 });
 
 /**
@@ -885,7 +888,7 @@ aedes.on('publish', async (packet, client) => {
         const accessType = getAccessType(data.role);
         data.accessType = accessType;
         await new Attendance(data).save();
-        console.log(Saved attendance for room ${roomNum} in hotel ${data.hotelId}:, data);
+        console.log(`Saved attendance for room ${roomNum} in hotel ${data.hotelId}:`, data);
 
         // Update room status with enhanced logic for guest / housekeeping / master
         let update = {};
@@ -958,12 +961,12 @@ aedes.on('publish', async (packet, client) => {
             fullUpdate,
             { upsert: true, new: true }
           );
-          broadcastToClients(roomUpdate:${data.hotelId}, { roomNum, ...fullUpdate });
+          broadcastToClients(`roomUpdate:${data.hotelId}`, { roomNum, ...fullUpdate });
         }
 
         // Create activity
         const activityType = data.check_in ? 'checkin' : 'checkout';
-        let action = ${data.role} checked ${data.check_in ? 'in' : 'out'} to Room ${data.room};
+        let action = `${data.role} checked ${data.check_in ? 'in' : 'out'} to Room ${data.room}`;
 
         // Add note if cleaning/maintenance duration exceeded threshold
         const roleNormalized = (data.role || '').toLowerCase();
@@ -1013,14 +1016,14 @@ aedes.on('publish', async (packet, client) => {
           powerUpdate,
           { upsert: true, new: true }
         );
-        broadcastToClients(roomUpdate:${data.hotelId}, { roomNum, ...powerUpdate });
+        broadcastToClients(`roomUpdate:${data.hotelId}`, { roomNum, ...powerUpdate });
       } else if (type === 'alerts') {
         await new Alert(data).save();
-        console.log(Saved alert for room ${roomNum} in hotel ${data.hotelId}:, data);
+        console.log(`Saved alert for room ${roomNum} in hotel ${data.hotelId}:`, data);
 
         // Create activity
         const activityType = 'security';
-        const action = Alert: ${data.alert_message} for ${data.role} in Room ${data.room};
+        const action = `Alert: ${data.alert_message} for ${data.role} in Room ${data.room}`;
         const time = data.triggered_at;
         newActivity = {
           hotelId: data.hotelId,
@@ -1032,10 +1035,10 @@ aedes.on('publish', async (packet, client) => {
         };
       } else if (type === 'denied_access') {
         await new Denied(data).save();
-        console.log(Saved denied access for room ${roomNum} in hotel ${data.hotelId}:, data);
+        console.log(`Saved denied access for room ${roomNum} in hotel ${data.hotelId}:`, data);
 
         // Create activity
-        const action = Denied access to ${data.role}: ${data.denial_reason} for Room ${data.room};
+        const action = `Denied access to ${data.role}: ${data.denial_reason} for Room ${data.room}`;
         const time = data.attempted_at;
         newActivity = {
           hotelId: data.hotelId,
@@ -1049,7 +1052,7 @@ aedes.on('publish', async (packet, client) => {
 
       if (newActivity) {
         const savedActivity = await new Activity(newActivity).save();
-        broadcastToClients(activityUpdate:${data.hotelId}, savedActivity);
+        broadcastToClients(`activityUpdate:${data.hotelId}`, savedActivity);
       }
     } catch (err) {
       console.error('Error processing MQTT message:', err);
@@ -1283,7 +1286,7 @@ app.post('/api/mqtt-data', async (req, res) => {
       const accessType = getAccessType(processedData.role);
       processedData.accessType = accessType;
       await new Attendance(processedData).save();
-      console.log(Saved attendance for room ${roomNum} in hotel ${processedData.hotelId}:, processedData);
+      console.log(`Saved attendance for room ${roomNum} in hotel ${processedData.hotelId}:`, processedData);
 
       // Update room status with enhanced logic for guest / housekeeping / master
       let update = {};
@@ -1356,12 +1359,12 @@ app.post('/api/mqtt-data', async (req, res) => {
           fullUpdate,
           { upsert: true, new: true }
         );
-        broadcastToClients(roomUpdate:${processedData.hotelId}, { roomNum, ...fullUpdate });
+        broadcastToClients(`roomUpdate:${processedData.hotelId}`, { roomNum, ...fullUpdate });
       }
 
       // Create activity
       const activityType = processedData.check_in ? 'checkin' : 'checkout';
-      let action = ${processedData.role} checked ${processedData.check_in ? 'in' : 'out'} to Room ${processedData.room};
+      let action = `${processedData.role} checked ${processedData.check_in ? 'in' : 'out'} to Room ${processedData.room}`;
 
       // Add note if cleaning/maintenance duration exceeded threshold
       const roleNormalized = (processedData.role || '').toLowerCase();
@@ -1427,14 +1430,14 @@ app.post('/api/mqtt-data', async (req, res) => {
         { upsert: true, new: true }
       );
 
-      broadcastToClients(roomUpdate:${processedData.hotelId}, { roomNum, ...powerUpdate });
+      broadcastToClients(`roomUpdate:${processedData.hotelId}`, { roomNum, ...powerUpdate });
     } else if (type === 'alerts') {
       await new Alert(processedData).save();
-      console.log(Saved alert for room ${roomNum} in hotel ${processedData.hotelId}:, processedData);
+      console.log(`Saved alert for room ${roomNum} in hotel ${processedData.hotelId}:`, processedData);
 
       // Create activity
       const activityType = 'security';
-      const action = Alert: ${processedData.alert_message} for ${processedData.role} in Room ${processedData.room};
+      const action = `Alert: ${processedData.alert_message} for ${processedData.role} in Room ${processedData.room}`;
       const time = processedData.triggered_at;
       newActivity = {
         hotelId: processedData.hotelId,
@@ -1446,10 +1449,10 @@ app.post('/api/mqtt-data', async (req, res) => {
       };
     } else if (type === 'denied_access') {
       await new Denied(processedData).save();
-      console.log(Saved denied access for room ${roomNum} in hotel ${processedData.hotelId}:, processedData);
+      console.log(`Saved denied access for room ${roomNum} in hotel ${processedData.hotelId}:`, processedData);
 
       // Create activity
-      const action = Denied access to ${processedData.role}: ${processedData.denial_reason} for Room ${processedData.room};
+      const action = `Denied access to ${processedData.role}: ${processedData.denial_reason} for Room ${processedData.room}`;
       const time = processedData.attempted_at;
       newActivity = {
         hotelId: processedData.hotelId,
@@ -1463,7 +1466,7 @@ app.post('/api/mqtt-data', async (req, res) => {
 
     if (newActivity) {
       const savedActivity = await new Activity(newActivity).save();
-      broadcastToClients(activityUpdate:${processedData.hotelId}, savedActivity);
+      broadcastToClients(`activityUpdate:${processedData.hotelId}`, savedActivity);
     }
 
     res.json({ success: true, message: 'Data processed successfully' });
@@ -1504,7 +1507,7 @@ app.post('/api/simulate-mqtt', async (req, res) => {
         const accessType = getAccessType(data.role);
         data.accessType = accessType;
         await new Attendance(data).save();
-        console.log(Simulated MQTT - Saved attendance for room ${roomNum}:, data);
+        console.log(`Simulated MQTT - Saved attendance for room ${roomNum}:`, data);
         
         // Update room status (same logic as MQTT handler)
         let update = {};
@@ -1575,11 +1578,11 @@ app.post('/api/simulate-mqtt', async (req, res) => {
             fullUpdate,
             { upsert: true, new: true }
           );
-          broadcastToClients(roomUpdate:${data.hotelId}, { roomNum, ...fullUpdate });
+          broadcastToClients(`roomUpdate:${data.hotelId}`, { roomNum, ...fullUpdate });
         }
 
         const activityType = data.check_in ? 'checkin' : 'checkout';
-        const action = ${data.role} checked ${data.check_in ? 'in' : 'out'} to Room ${data.room};
+        const action = `${data.role} checked ${data.check_in ? 'in' : 'out'} to Room ${data.room}`;
         const time = data.check_in || data.check_out;
         newActivity = {
           hotelId: data.hotelId,
@@ -1591,25 +1594,25 @@ app.post('/api/simulate-mqtt', async (req, res) => {
         };
       } else if (type === 'alerts') {
         await new Alert(data).save();
-        console.log(Simulated MQTT - Saved alert for room ${roomNum}:, data);
+        console.log(`Simulated MQTT - Saved alert for room ${roomNum}:`, data);
         
         newActivity = {
           hotelId: data.hotelId,
           id: new Date().getTime().toString(),
           type: 'security',
-          action: Alert: ${data.alert_message} for ${data.role} in Room ${data.room},
+          action: `Alert: ${data.alert_message} for ${data.role} in Room ${data.room}`,
           user: 'System',
           time: data.triggered_at,
         };
       } else if (type === 'denied_access') {
         await new Denied(data).save();
-        console.log(Simulated MQTT - Saved denied access for room ${roomNum}:, data);
+        console.log(`Simulated MQTT - Saved denied access for room ${roomNum}:`, data);
         
         newActivity = {
           hotelId: data.hotelId,
           id: new Date().getTime().toString(),
           type: 'security',
-          action: Denied access to ${data.role}: ${data.denial_reason} for Room ${data.room},
+          action: `Denied access to ${data.role}: ${data.denial_reason} for Room ${data.room}`,
           user: data.role,
           time: data.attempted_at,
         };
@@ -1617,7 +1620,7 @@ app.post('/api/simulate-mqtt', async (req, res) => {
 
       if (newActivity) {
         const savedActivity = await new Activity(newActivity).save();
-        broadcastToClients(activityUpdate:${data.hotelId}, savedActivity);
+        broadcastToClients(`activityUpdate:${data.hotelId}`, savedActivity);
       }
     }
 
@@ -1645,12 +1648,12 @@ process.on('SIGTERM', () => {
 });
 
 server.listen(httpPort, () => {
-  const host = process.env.RENDER_EXTERNAL_URL || http://0.0.0.0:${httpPort};
+  const host = process.env.RENDER_EXTERNAL_URL || `http://0.0.0.0:${httpPort}`;
   const wsUrl = host.startsWith('https://')
     ? host.replace(/^https/, 'wss') + '/mqtt'
     : host.replace(/^http/, 'ws') + '/mqtt';
 
-  console.log(🚀 HTTP/WebSocket server running on port ${httpPort});
-  console.log(📡 MQTT over WebSocket: ${wsUrl});
-  console.log(🌐 API endpoints available at ${host}/api);
+  console.log(`🚀 HTTP/WebSocket server running on port ${httpPort}`);
+  console.log(`📡 MQTT over WebSocket: ${wsUrl}`);
+  console.log(`🌐 API endpoints available at ${host}/api`);
 });
