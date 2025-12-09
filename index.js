@@ -25,6 +25,7 @@ const mqttPort = process.env.MQTT_PORT || 1883;
 const corsOrigins = [
   'https://hotel-frontend-two-puce.vercel.app',
   'https://hotel-backend-5kcn.onrender.com',
+  'https://hotel-mng-frontend-i3ed.vercel.app',
   'http://localhost:3001',
   'http://localhost:3000',
   'http://127.0.0.1:3001',
