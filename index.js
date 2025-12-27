@@ -31,7 +31,8 @@ const corsOrigins = [
   'http://127.0.0.1:3001',
   'http://127.0.0.1:3000',
   'https://hotelmng-git-main-jivis-projects-13189c75.vercel.app',
-  'https://hotel-abkk4q2he-jivis-projects-13189c75.vercel.app'
+  'https://hotel-abkk4q2he-jivis-projects-13189c75.vercel.app',
+  'https://hotel-global.vercel.app'
 ];
 if (process.env.FRONTEND_URL) corsOrigins.push(process.env.FRONTEND_URL);
 
